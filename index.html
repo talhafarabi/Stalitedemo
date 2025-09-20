@@ -1,3 +1,4 @@
+
 <!DOCTYPE html><html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -11,6 +12,7 @@
     header { background: #222; color: white; padding: 10px; font-size: 1.5em; }
     button { padding: 10px 15px; margin: 10px; background: #007BFF; color: white; border: none; border-radius: 8px; cursor: pointer; }
     button:hover { background: #0056b3; }
+    input { padding: 5px; width: 80px; margin: 5px; }
   </style>
 </head>
 <body>
@@ -18,13 +20,17 @@
   <div id="map"></div>
   <div>
     <h2 id="pass-timer">Loading next visible pass...</h2>
-    <button onclick="getSatellitesAbove()">Show Satellites Above Me</button>
+    <div>
+      Latitude: <input id="lat" type="number" value="40.7128" step="0.0001">
+      Longitude: <input id="lng" type="number" value="-74.0060" step="0.0001">
+      <button onclick="getSatellitesAboveManual()">Show Satellites Above</button>
+    </div>
   </div>  <script>
     const API_KEY = "LY45T7-MPCWBG-YQ7Q5V-5KK8"; // Your provided N2YO key
     const ISS_ID = 25544; // NORAD ID for the ISS
 
-    // Initialize map
-    const map = L.map('map').setView([0, 0], 2);
+    // Initialize map hello
+    const map = L.map('map').setView([40.7128, -74.0060], 3);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
 
     const issIcon = L.icon({
@@ -48,64 +54,49 @@
       }
     }
 
-    // Fixed button function
-    async function getSatellitesAbove() {
-      if (!navigator.geolocation) {
-        alert("Geolocation not supported by your browser");
-        return;
-      }
+    // Manual coordinate satellite fetch
+    async function getSatellitesAboveManual() {
+      const latitude = document.getElementById('lat').value;
+      const longitude = document.getElementById('lng').value;
+      const url = `https://api.n2yo.com/rest/v1/satellite/above/${latitude}/${longitude}/0/100/0/?apiKey=${API_KEY}`;
 
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        console.log("User location:", latitude, longitude);
-
-        try {
-          const url = `https://api.n2yo.com/rest/v1/satellite/above/${latitude}/${longitude}/0/100/0/?apiKey=${API_KEY}`;
-          console.log("Fetching satellites from:", url);
-          const res = await fetch(url);
-          const data = await res.json();
-          console.log("API response:", data);
-
-          if (data.above && data.above.length > 0) {
-            const satelliteNames = data.above.map(s => s.satname).join(", ");
-            alert(`Satellites overhead right now:\n${satelliteNames}`);
-          } else {
-            alert("No satellites overhead at the moment.");
-          }
-        } catch (error) {
-          console.error("Error fetching satellites:", error);
-          alert("Error fetching satellites. Check console for details.");
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.above && data.above.length > 0) {
+          const satelliteNames = data.above.map(s => s.satname).join(", ");
+          alert(`Satellites overhead at (${latitude}, ${longitude}):\n${satelliteNames}`);
+        } else {
+          alert(`No satellites overhead at (${latitude}, ${longitude}).`);
         }
-      }, (error) => {
-        console.error("Geolocation error:", error);
-        alert("Unable to access location. Please allow location permissions.");
-      });
+      } catch (error) {
+        console.error("Error fetching satellites:", error);
+        alert("Error fetching satellites. Check console for details.");
+      }
     }
 
-    // Fetch next visible pass countdown
+    // Optional: fetch next ISS pass for these coordinates
     async function fetchNextPass() {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        try {
-          const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/visualpasses/${ISS_ID}/${latitude}/${longitude}/0/1/300/?apiKey=${API_KEY}`);
-          const data = await res.json();
-          if (data.passes && data.passes.length > 0) {
-            const nextPass = new Date(data.passes[0].startUTC * 1000);
-            setInterval(() => {
-              const now = new Date();
-              const diff = Math.max(0, (nextPass - now) / 1000);
-              const minutes = Math.floor(diff / 60);
-              const seconds = Math.floor(diff % 60);
-              document.getElementById('pass-timer').innerText = `Next visible ISS pass in: ${minutes}m ${seconds}s`;
-            }, 1000);
-          } else {
-            document.getElementById('pass-timer').innerText = "No visible passes in the next 24 hours.";
-          }
-        } catch (error) {
-          console.error("Error fetching next pass:", error);
+      const latitude = document.getElementById('lat').value;
+      const longitude = document.getElementById('lng').value;
+      try {
+        const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/visualpasses/${ISS_ID}/${latitude}/${longitude}/0/1/300/?apiKey=${API_KEY}`);
+        const data = await res.json();
+        if (data.passes && data.passes.length > 0) {
+          const nextPass = new Date(data.passes[0].startUTC * 1000);
+          setInterval(() => {
+            const now = new Date();
+            const diff = Math.max(0, (nextPass - now) / 1000);
+            const minutes = Math.floor(diff / 60);
+            const seconds = Math.floor(diff % 60);
+            document.getElementById('pass-timer').innerText = `Next visible ISS pass in: ${minutes}m ${seconds}s`;
+          }, 1000);
+        } else {
+          document.getElementById('pass-timer').innerText = "No visible passes in the next 24 hours.";
         }
-      });
+      } catch (error) {
+        console.error("Error fetching next pass:", error);
+      }
     }
 
     // Start updates
