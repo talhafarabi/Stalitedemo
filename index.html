@@ -1,18 +1,50 @@
-
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SatScope - ISS Tracker</title>
+  <title>SatScope 🌍 - ISS Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; text-align: center; }
-    #map { height: 400px; width: 100%; }
-    header { background: #222; color: white; padding: 10px; font-size: 1.5em; }
-    button { padding: 10px 15px; margin: 10px; background: #007BFF; color: white; border: none; border-radius: 8px; cursor: pointer; }
-    button:hover { background: #0056b3; }
-    input { padding: 5px; width: 80px; margin: 5px; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      text-align: center;
+      background: #f8f9fa;
+    }
+    #map {
+      height: 400px;
+      width: 100%;
+    }
+    header {
+      background: #222;
+      color: white;
+      padding: 10px;
+      font-size: 1.5em;
+    }
+    button {
+      padding: 10px 15px;
+      margin: 10px;
+      background: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    input {
+      padding: 5px;
+      width: 80px;
+      margin: 5px;
+    }
+    #pass-timer {
+      font-weight: bold;
+      margin-top: 15px;
+    }
   </style>
 </head>
 <body>
@@ -23,85 +55,68 @@
     <div>
       Latitude: <input id="lat" type="number" value="40.7128" step="0.0001">
       Longitude: <input id="lng" type="number" value="-74.0060" step="0.0001">
-      <button onclick="getSatellitesAboveManual()">Show Satellites Above</button>
+      <button onclick="showSatellites()">Show Satellites Above</button>
     </div>
-  </div>  <script>
-    const API_KEY = "LY45T7-MPCWBG-YQ7Q5V-5KK8"; // Your provided N2YO key
-    const ISS_ID = 25544; // NORAD ID for the ISS
+  </div>
 
-    // Initialize map hello
-    const map = L.map('map').setView([40.7128, -74.0060], 3);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+  <script>
+    const map = L.map('map').setView([0, 0], 2);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18
+    }).addTo(map);
 
     const issIcon = L.icon({
       iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/International_Space_Station.svg',
       iconSize: [50, 32],
     });
+
     const issMarker = L.marker([0, 0], { icon: issIcon }).addTo(map);
 
-    // Fetch ISS position every 5 seconds
+    // Fetch ISS position
     async function fetchISSPosition() {
       try {
-        const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/positions/${ISS_ID}/0/0/0/1/?apiKey=${API_KEY}`);
+        const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
         const data = await res.json();
-        if (data.positions && data.positions.length > 0) {
-          const { satlatitude, satlongitude } = data.positions[0];
-          issMarker.setLatLng([satlatitude, satlongitude]);
-          map.setView([satlatitude, satlongitude], 3);
-        }
+        const { latitude, longitude } = data;
+
+        issMarker.setLatLng([latitude, longitude]);
+        map.setView([latitude, longitude], 3);
       } catch (error) {
-        console.error("Error fetching ISS position:", error);
+        alert("Error fetching ISS position. Please try again later.");
+        console.error(error);
       }
     }
 
-    // Manual coordinate satellite fetch
-    async function getSatellitesAboveManual() {
-      const latitude = document.getElementById('lat').value;
-      const longitude = document.getElementById('lng').value;
-      const url = `https://api.n2yo.com/rest/v1/satellite/above/${latitude}/${longitude}/0/100/0/?apiKey=${API_KEY}`;
+    // Simulated satellites overhead (fake data)
+    function showSatellites() {
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
 
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.above && data.above.length > 0) {
-          const satelliteNames = data.above.map(s => s.satname).join(", ");
-          alert(`Satellites overhead at (${latitude}, ${longitude}):\n${satelliteNames}`);
-        } else {
-          alert(`No satellites overhead at (${latitude}, ${longitude}).`);
-        }
-      } catch (error) {
-        console.error("Error fetching satellites:", error);
-        alert("Error fetching satellites. Check console for details.");
-      }
+      alert(`Satellites currently visible near (${lat}, ${lng}):\n- ISS (International Space Station)\n- Hubble Telescope (simulated)`);
     }
 
-    // Optional: fetch next ISS pass for these coordinates
-    async function fetchNextPass() {
-      const latitude = document.getElementById('lat').value;
-      const longitude = document.getElementById('lng').value;
-      try {
-        const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/visualpasses/${ISS_ID}/${latitude}/${longitude}/0/1/300/?apiKey=${API_KEY}`);
-        const data = await res.json();
-        if (data.passes && data.passes.length > 0) {
-          const nextPass = new Date(data.passes[0].startUTC * 1000);
-          setInterval(() => {
-            const now = new Date();
-            const diff = Math.max(0, (nextPass - now) / 1000);
-            const minutes = Math.floor(diff / 60);
-            const seconds = Math.floor(diff % 60);
-            document.getElementById('pass-timer').innerText = `Next visible ISS pass in: ${minutes}m ${seconds}s`;
-          }, 1000);
-        } else {
-          document.getElementById('pass-timer').innerText = "No visible passes in the next 24 hours.";
-        }
-      } catch (error) {
-        console.error("Error fetching next pass:", error);
-      }
+    // Simulated next pass countdown
+    function startPassCountdown() {
+      const now = new Date();
+      const nextPass = new Date(now.getTime() + 1000 * 60 * 15); // 15 min from now
+
+      setInterval(() => {
+        const currentTime = new Date();
+        const diff = Math.max(0, (nextPass - currentTime) / 1000);
+
+        const minutes = Math.floor(diff / 60);
+        const seconds = Math.floor(diff % 60);
+
+        document.getElementById('pass-timer').innerText =
+          `Next visible ISS pass in: ${minutes}m ${seconds}s`;
+      }, 1000);
     }
 
     // Start updates
     fetchISSPosition();
-    setInterval(fetchISSPosition, 5000);
-    fetchNextPass();
-  </script></body>
+    setInterval(fetchISSPosition, 5000); // update every 5s
+    startPassCountdown();
+  </script>
+</body>
 </html>
