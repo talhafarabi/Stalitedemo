@@ -73,22 +73,57 @@
 
     const issMarker = L.marker([0, 0], { icon: issIcon }).addTo(map);
 
-    // Fetch ISS position
+    let alertShown = false; // prevent repeated alerts
+
+    // Haversine distance formula to calculate km between two coordinates
+    function getDistanceKm(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // Fetch ISS position and check proximity
     async function fetchISSPosition() {
       try {
         const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
         const data = await res.json();
         const { latitude, longitude } = data;
 
+        // Update ISS marker on the map
         issMarker.setLatLng([latitude, longitude]);
         map.setView([latitude, longitude], 3);
+
+        // Get user location from input
+        const userLat = parseFloat(document.getElementById('lat').value);
+        const userLng = parseFloat(document.getElementById('lng').value);
+
+        // Calculate distance
+        const distance = getDistanceKm(latitude, longitude, userLat, userLng);
+
+        // Check if within 100 km
+        if (distance <= 100 && !alertShown) {
+          alertShown = true; // prevent spamming
+          alert(`🚀 The ISS is passing above your location! Distance: ${distance.toFixed(2)} km`);
+        }
+
+        // Reset alert if ISS moves away
+        if (distance > 120) {
+          alertShown = false;
+        }
       } catch (error) {
         alert("Error fetching ISS position. Please try again later.");
         console.error(error);
       }
     }
 
-    // Simulated satellites overhead (fake data)
+    // Simulated satellites overhead
     function showSatellites() {
       const lat = parseFloat(document.getElementById('lat').value);
       const lng = parseFloat(document.getElementById('lng').value);
