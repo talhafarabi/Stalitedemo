@@ -39,12 +39,15 @@
     // Fetch ISS position every 5 seconds
     async function fetchISSPosition() {
       try {
-        const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/positions/${ISS_ID}/0/0/0/1/&apiKey=${API_KEY}`);
+        const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/positions/${ISS_ID}/0/0/0/1/?apiKey=${API_KEY}`);
         const data = await res.json();
-        const { satlatitude, satlongitude } = data.positions[0];
+        console.log("ISS Position Data:", data);
 
-        issMarker.setLatLng([satlatitude, satlongitude]);
-        map.setView([satlatitude, satlongitude], 3);
+        if (data.positions && data.positions.length > 0) {
+          const { satlatitude, satlongitude } = data.positions[0];
+          issMarker.setLatLng([satlatitude, satlongitude]);
+          map.setView([satlatitude, satlongitude], 3);
+        }
       } catch (error) {
         console.error("Error fetching ISS position:", error);
       }
@@ -59,13 +62,29 @@
 
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const { latitude, longitude } = pos.coords;
+        console.log("User location:", latitude, longitude);
+
         try {
-          const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/above/${latitude}/${longitude}/0/70/0/&apiKey=${API_KEY}`);
+          const url = `https://api.n2yo.com/rest/v1/satellite/above/${latitude}/${longitude}/0/70/0/?apiKey=${API_KEY}`;
+          console.log("Fetching:", url);
+
+          const res = await fetch(url);
           const data = await res.json();
-          alert(`Satellites overhead: ${data.above.map(s => s.satname).join(", ")}`);
+          console.log("Satellites Above Response:", data);
+
+          if (data.above && data.above.length > 0) {
+            const satelliteNames = data.above.map(s => s.satname).join(", ");
+            alert(`Satellites overhead right now:\n${satelliteNames}`);
+          } else {
+            alert("No satellites overhead at the moment.");
+          }
         } catch (error) {
           console.error("Error fetching satellites above:", error);
+          alert("Error fetching satellites. Check console for details.");
         }
+      }, (error) => {
+        alert("Unable to access location. Please allow location permissions.");
+        console.error("Geolocation error:", error);
       });
     }
 
@@ -74,9 +93,11 @@
       if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const { latitude, longitude } = pos.coords;
+
         try {
-          const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/visualpasses/${ISS_ID}/${latitude}/${longitude}/0/1/300/&apiKey=${API_KEY}`);
+          const res = await fetch(`https://api.n2yo.com/rest/v1/satellite/visualpasses/${ISS_ID}/${latitude}/${longitude}/0/1/300/?apiKey=${API_KEY}`);
           const data = await res.json();
+          console.log("Next Pass Data:", data);
 
           if (data.passes && data.passes.length > 0) {
             const nextPass = new Date(data.passes[0].startUTC * 1000);
