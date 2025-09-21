@@ -24,21 +24,28 @@
       width: 100%;
     }
     #status {
-      margin: 15px 0;
+      margin: 10px 0;
       font-weight: bold;
       color: #333;
     }
+    #countdown {
+      margin: 10px 0;
+      font-size: 1.2em;
+      font-weight: bold;
+      color: #007BFF;
+    }
     #alert {
       background: #ffdddd;
-      border: 1px solid #ff5555;
-      padding: 10px;
+      border: 2px solid #ff0000;
+      padding: 15px;
       margin: 10px auto;
       display: none;
-      width: 80%;
-      max-width: 320px;
+      width: 90%;
+      max-width: 350px;
       color: #a10000;
       font-weight: bold;
       border-radius: 8px;
+      font-size: 1.2em;
     }
   </style>
 </head>
@@ -47,7 +54,8 @@
 
   <div id="map"></div>
   <div id="status">Getting your location...</div>
-  <div id="alert">🚀 The ISS is currently overhead within 100 km of your location!</div>
+  <div id="countdown">Calculating next pass...</div>
+  <div id="alert">🚀 Watch out. It's over your head fr.</div>
 
   <script>
     const map = L.map('map').setView([0, 0], 2);
@@ -66,19 +74,19 @@
     const issMarker = L.marker([0, 0], { icon: issIcon }).addTo(map);
     let userMarker = null;
 
-    // Live user location variables
+    // Live user location
     let userLat = null;
     let userLng = null;
 
-    // Get distance between two lat/lng in km (Haversine formula)
+    // Haversine formula to calculate distance in km
     function getDistanceFromLatLon(lat1, lon1, lat2, lon2) {
-      const R = 6371; // Earth's radius in km
+      const R = 6371;
       const dLat = (lat2 - lat1) * Math.PI / 180;
       const dLon = (lon2 - lon1) * Math.PI / 180;
       const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.sin(dLat / 2) ** 2 +
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        Math.sin(dLon / 2) ** 2;
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return R * c;
     }
@@ -86,7 +94,7 @@
     // Track user's live location
     function trackUserLocation() {
       if (!navigator.geolocation) {
-        document.getElementById('status').innerText = "Geolocation is not supported by your browser.";
+        document.getElementById('status').innerText = "Geolocation not supported.";
         return;
       }
 
@@ -105,13 +113,48 @@
             `Your location: ${userLat.toFixed(4)}, ${userLng.toFixed(4)}`;
         },
         (error) => {
-          document.getElementById('status').innerText = "Error getting your location: " + error.message;
+          document.getElementById('status').innerText = "Error getting location: " + error.message;
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
       );
     }
 
-    // Fetch ISS position and check distance
+    let lastDistance = Infinity;
+    let countdownTime = null;
+
+    // Predict next ISS pass
+    function updateCountdown(distance) {
+      const countdownElement = document.getElementById('countdown');
+
+      if (distance <= 100) {
+        countdownElement.innerText = "The ISS is overhead NOW!";
+        document.getElementById('alert').style.display = 'block';
+        return;
+      }
+
+      document.getElementById('alert').style.display = 'none';
+
+      // Simple prediction: assume ISS travels fast enough that next pass is coming
+      if (!countdownTime || distance < lastDistance) {
+        // Estimate time until ISS within 100km
+        const secondsUntilPass = Math.floor(distance * 20); // Rough estimate
+        countdownTime = new Date(Date.now() + secondsUntilPass * 1000);
+      }
+
+      const now = new Date();
+      const diff = Math.max(0, (countdownTime - now) / 1000);
+
+      const hours = Math.floor(diff / 3600);
+      const minutes = Math.floor((diff % 3600) / 60);
+      const seconds = Math.floor(diff % 60);
+
+      countdownElement.innerText =
+        `Next pass in: ${hours}h ${minutes}m ${seconds}s`;
+
+      lastDistance = distance;
+    }
+
+    // Fetch ISS position every 5 seconds
     async function trackISS() {
       try {
         const res = await fetch("https://api.wheretheiss.at/v1/satellites/25544");
@@ -121,40 +164,33 @@
         // Update ISS marker
         issMarker.setLatLng([latitude, longitude]);
 
-        // Keep map focused on both ISS and user
+        // Adjust map to show both positions
         if (userLat !== null && userLng !== null) {
           const bounds = L.latLngBounds([
             [userLat, userLng],
             [latitude, longitude]
           ]);
           map.fitBounds(bounds, { padding: [50, 50] });
-        } else {
-          map.setView([latitude, longitude], 3);
-        }
 
-        // Calculate distance to user
-        if (userLat !== null && userLng !== null) {
+          // Calculate distance to user
           const distance = getDistanceFromLatLon(userLat, userLng, latitude, longitude);
           document.getElementById('status').innerText =
             `ISS Distance: ${distance.toFixed(2)} km`;
 
-          // Show alert if ISS is within 100 km
-          if (distance <= 100) {
-            document.getElementById('alert').style.display = 'block';
-          } else {
-            document.getElementById('alert').style.display = 'none';
-          }
+          updateCountdown(distance);
+        } else {
+          map.setView([latitude, longitude], 3);
         }
       } catch (error) {
-        console.error("Error fetching ISS position:", error);
+        console.error("Error fetching ISS data:", error);
         document.getElementById('status').innerText = "Error tracking ISS.";
       }
     }
 
-    // Start everything
+    // Start
     trackUserLocation();
     trackISS();
-    setInterval(trackISS, 5000); // Update every 5 seconds
+    setInterval(trackISS, 5000);
   </script>
 </body>
 </html>
