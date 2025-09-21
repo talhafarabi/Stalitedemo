@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SatScope 🌍 - ISS Tracker</title>
+  <title>SatScope 🌍 - ISS Overhead Alert</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <style>
@@ -13,126 +13,148 @@
       text-align: center;
       background: #f4f4f4;
     }
-    #map {
-      height: 400px;
-      width: 100%;
-    }
     header {
       background: #222;
       color: white;
       padding: 10px;
       font-size: 1.5em;
     }
-    button {
-      padding: 10px 15px;
-      margin: 10px;
-      background: #007BFF;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
+    #map {
+      height: 400px;
+      width: 100%;
     }
-    button:hover {
-      background: #0056b3;
-    }
-    input {
-      padding: 5px;
-      width: 90px;
-      margin: 5px;
-      text-align: center;
-    }
-    #pass-timer {
-      font-weight: bold;
+    #status {
       margin: 15px 0;
+      font-weight: bold;
       color: #333;
+    }
+    #alert {
+      background: #ffdddd;
+      border: 1px solid #ff5555;
+      padding: 10px;
+      margin: 10px auto;
+      display: none;
+      width: 80%;
+      max-width: 320px;
+      color: #a10000;
+      font-weight: bold;
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
-  <header>SatScope 🌍 - ISS Tracker</header>
+  <header>SatScope 🌍 - ISS Overhead Alert</header>
 
   <div id="map"></div>
-
-  <div>
-    <h2 id="pass-timer">Loading next visible pass...</h2>
-    <div>
-      Latitude: <input id="lat" type="number" value="40.7128" step="0.0001">
-      Longitude: <input id="lng" type="number" value="-74.0060" step="0.0001">
-      <button onclick="fetchNextPass()">Check Next Pass</button>
-    </div>
-  </div>
+  <div id="status">Getting your location...</div>
+  <div id="alert">🚀 The ISS is currently overhead within 100 km of your location!</div>
 
   <script>
-    const map = L.map('map').setView([40.7128, -74.0060], 3);
+    const map = L.map('map').setView([0, 0], 2);
 
-    // Add OpenStreetMap tiles
+    // OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
     }).addTo(map);
 
-    // ISS icon
+    // ISS Icon
     const issIcon = L.icon({
       iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/International_Space_Station.svg',
       iconSize: [50, 32],
     });
 
     const issMarker = L.marker([0, 0], { icon: issIcon }).addTo(map);
+    let userMarker = null;
 
-    // Fetch ISS position from "Where the ISS At" API
-    async function fetchISSPosition() {
+    // Live user location variables
+    let userLat = null;
+    let userLng = null;
+
+    // Get distance between two lat/lng in km (Haversine formula)
+    function getDistanceFromLatLon(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth's radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // Track user's live location
+    function trackUserLocation() {
+      if (!navigator.geolocation) {
+        document.getElementById('status').innerText = "Geolocation is not supported by your browser.";
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        (position) => {
+          userLat = position.coords.latitude;
+          userLng = position.coords.longitude;
+
+          if (userMarker) map.removeLayer(userMarker);
+
+          userMarker = L.marker([userLat, userLng]).addTo(map)
+            .bindPopup("You are here")
+            .openPopup();
+
+          document.getElementById('status').innerText =
+            `Your location: ${userLat.toFixed(4)}, ${userLng.toFixed(4)}`;
+        },
+        (error) => {
+          document.getElementById('status').innerText = "Error getting your location: " + error.message;
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    }
+
+    // Fetch ISS position and check distance
+    async function trackISS() {
       try {
         const res = await fetch("https://api.wheretheiss.at/v1/satellites/25544");
         const data = await res.json();
         const { latitude, longitude } = data;
 
-        // Update marker position
+        // Update ISS marker
         issMarker.setLatLng([latitude, longitude]);
-        map.setView([latitude, longitude], 3);
+
+        // Keep map focused on both ISS and user
+        if (userLat !== null && userLng !== null) {
+          const bounds = L.latLngBounds([
+            [userLat, userLng],
+            [latitude, longitude]
+          ]);
+          map.fitBounds(bounds, { padding: [50, 50] });
+        } else {
+          map.setView([latitude, longitude], 3);
+        }
+
+        // Calculate distance to user
+        if (userLat !== null && userLng !== null) {
+          const distance = getDistanceFromLatLon(userLat, userLng, latitude, longitude);
+          document.getElementById('status').innerText =
+            `ISS Distance: ${distance.toFixed(2)} km`;
+
+          // Show alert if ISS is within 100 km
+          if (distance <= 100) {
+            document.getElementById('alert').style.display = 'block';
+          } else {
+            document.getElementById('alert').style.display = 'none';
+          }
+        }
       } catch (error) {
         console.error("Error fetching ISS position:", error);
+        document.getElementById('status').innerText = "Error tracking ISS.";
       }
     }
 
-    // Fetch next ISS pass using simplified calculations
-    async function fetchNextPass() {
-      const lat = parseFloat(document.getElementById("lat").value);
-      const lng = parseFloat(document.getElementById("lng").value);
-
-      try {
-        // This uses a rough estimate for next pass
-        const res = await fetch(`https://api.wheretheiss.at/v1/satellites/25544`);
-        const data = await res.json();
-
-        const issLat = data.latitude;
-        const issLng = data.longitude;
-
-        const distance = Math.sqrt(Math.pow(issLat - lat, 2) + Math.pow(issLng - lng, 2));
-
-        let timeToPass = Math.floor(distance * 600); // Rough seconds until pass
-        if (timeToPass < 0) timeToPass = 0;
-
-        setInterval(() => {
-          if (timeToPass > 0) {
-            timeToPass--;
-            const minutes = Math.floor(timeToPass / 60);
-            const seconds = timeToPass % 60;
-            document.getElementById("pass-timer").innerText = `Next visible ISS pass in: ${minutes}m ${seconds}s`;
-          } else {
-            document.getElementById("pass-timer").innerText = "The ISS is overhead now!";
-          }
-        }, 1000);
-      } catch (error) {
-        document.getElementById("pass-timer").innerText = "Error calculating next pass.";
-        console.error(error);
-      }
-    }
-
-    // Update ISS location every 5 seconds
-    fetchISSPosition();
-    setInterval(fetchISSPosition, 5000);
-
-    // Auto-load next pass for default coordinates
-    fetchNextPass();
+    // Start everything
+    trackUserLocation();
+    trackISS();
+    setInterval(trackISS, 5000); // Update every 5 seconds
   </script>
 </body>
 </html>
